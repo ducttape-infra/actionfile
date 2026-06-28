@@ -129,6 +129,7 @@ func main() {
 
 			// Execute
 			return actionfile.Execute(actionfile.ExecuteOpts{
+				Dir:         filepath.Dir(file),
 				Shell:       shell,
 				Background:  background,
 				Interactive: interactive,

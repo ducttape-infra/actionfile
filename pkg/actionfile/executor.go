@@ -7,75 +7,68 @@ import (
 	"strings"
 )
 
-// ExecuteOpts controls execution behavior.
 type ExecuteOpts struct {
-	Shell       string // shell to use (default: bash)
-	Background  bool   // run in background
-	Interactive bool   // run interactively
-	Subshell    bool   // run in subshell (default)
-	Evaluate    bool   // eval in current shell
-	Sourced     bool   // source via tempfile
-	Vars        string // variable assignments (newline-separated)
-	Config      string // config exports
-	Shared      string // shared script
-	Script      string // action script
-	Mode        string // execution mode hint
+	Dir         string
+	Shell       string
+	Background  bool
+	Interactive bool
+	Subshell    bool
+	Evaluate    bool
+	Sourced     bool
+	Vars        string
+	Config      string
+	Shared      string
+	Script      string
+	Mode        string
 }
 
-// Execute runs the action script according to the options.
 func Execute(opts ExecuteOpts) error {
 	if opts.Shell == "" {
 		opts.Shell = "bash"
 	}
-
-	// Build preamble: config + vars + shared
-	var preamble string
+	var pre string
+	if opts.Dir != "" {
+		pre += fmt.Sprintf("cd %q\n", opts.Dir)
+	}
 	if opts.Config != "" {
-		preamble += opts.Config + "\n"
+		pre += opts.Config + "\n"
 	}
 	if opts.Vars != "" {
-		preamble += opts.Vars + "\n"
+		pre += opts.Vars + "\n"
 	}
 	if opts.Shared != "" {
-		preamble += opts.Shared + "\n"
+		pre += opts.Shared + "\n"
 	}
-	fullScript := preamble + opts.Script
-
-	// Mode from opts, fallback to Mode field
+	script := pre + opts.Script
 	mode := opts.Mode
 	if mode == "" {
 		mode = "subshell"
 	}
-
 	switch {
 	case opts.Background:
-		return executeBackground(opts.Shell, fullScript)
+		return runShell(opts.Shell, script, true)
 	case opts.Interactive:
-		return executeInteractive(opts.Shell, fullScript)
+		return runInteractive(opts.Shell, script)
 	case opts.Evaluate:
-		return executeEvaluate(fullScript)
+		return runShell("sh", script, false)
 	case opts.Sourced:
-		return executeSourced(opts.Shell, fullScript)
-	default: // subshell
-		return executeSubshell(opts.Shell, fullScript)
+		return runSourced(opts.Shell, script)
+	default:
+		return runShell(opts.Shell, script, false)
 	}
 }
 
-func executeSubshell(shell, script string) error {
+func runShell(shell, script string, bg bool) error {
 	cmd := exec.Command(shell, "-c", script)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	if bg {
+		return cmd.Start()
+	}
 	return cmd.Run()
 }
 
-func executeBackground(shell, script string) error {
-	cmd := exec.Command(shell, "-c", script)
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	return cmd.Start()
-}
-
-func executeInteractive(shell, script string) error {
+func runInteractive(shell, script string) error {
 	cmd := exec.Command(shell, "-i")
 	cmd.Stdin = strings.NewReader(script)
 	cmd.Stdout = os.Stdout
@@ -83,30 +76,18 @@ func executeInteractive(shell, script string) error {
 	return cmd.Run()
 }
 
-func executeEvaluate(script string) error {
-	// eval in current process (limited — Go can't modify parent shell)
-	// Run via sh -c as a subshell equivalent
-	cmd := exec.Command("sh", "-c", script)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
-func executeSourced(shell, script string) error {
-	// Write to tempfile and source it
-	tmpFile, err := os.CreateTemp("", "actionfile-*.sh")
+func runSourced(shell, script string) error {
+	f, err := os.CreateTemp("", "actionfile-*.sh")
 	if err != nil {
 		return fmt.Errorf("create temp: %w", err)
 	}
-	defer os.Remove(tmpFile.Name())
-
-	if _, err := tmpFile.WriteString(script); err != nil {
-		tmpFile.Close()
+	defer os.Remove(f.Name())
+	if _, err := f.WriteString(script); err != nil {
+		f.Close()
 		return fmt.Errorf("write temp: %w", err)
 	}
-	tmpFile.Close()
-
-	cmd := exec.Command(shell, "-c", "source "+tmpFile.Name())
+	f.Close()
+	cmd := exec.Command(shell, "-c", "source "+f.Name())
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
