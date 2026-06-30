@@ -1,0 +1,61 @@
+version: 2
+
+project_name: actionfile
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: action
+    main: ./cmd/action
+    binary: action
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: binary
+    format: binary
+    name_template: "{{ .Binary }}-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+
+nfpms:
+  - id: packages
+    package_name: actionfile
+    file_name_template: "{{ .ConventionalFileName }}"
+    vendor: Ducttape Infra
+    homepage: https://github.com/ducttape-infra/actionfile
+    maintainer: Ducttape Infra <developers@ducttape-infra.org>
+    description: |-
+      Execute actions from Markdown-based Actionfiles.
+    license: MIT
+    formats:
+      - apk
+      - deb
+      - rpm
+    bindir: /usr/sbin
+    contents:
+      - src: ./LICENSE
+        dst: /usr/share/licenses/actionfile/LICENSE
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"

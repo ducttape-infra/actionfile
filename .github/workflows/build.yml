@@ -1,0 +1,59 @@
+name: Actionfile build
+run-name: building actionfile
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "main"
+  pull_request: {}
+
+jobs:
+  build:
+    name: build-process
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Build binary
+        run: |
+          make cross
+
+      - name: Run tests
+        run: |
+          go test ./...
+
+      - name: Upload Artifact - linux amd64
+        uses: actions/upload-artifact@v4
+        with:
+          name: action-linux-amd64
+          path: out/action-linux-amd64
+          retention-days: 5
+
+      - name: Upload Artifact - linux arm64
+        uses: actions/upload-artifact@v4
+        with:
+          name: action-linux-arm64
+          path: out/action-linux-arm64
+          retention-days: 5
+
+      - name: Upload Artifact - darwin amd64
+        uses: actions/upload-artifact@v4
+        with:
+          name: action-darwin-amd64
+          path: out/action-darwin-amd64
+          retention-days: 5
+
+      - name: Upload Artifact - darwin arm64
+        uses: actions/upload-artifact@v4
+        with:
+          name: action-darwin-arm64
+          path: out/action-darwin-arm64
+          retention-days: 5
